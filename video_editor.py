@@ -208,55 +208,55 @@ def apply_mute(clip):
 # Aspect Ratio & Anti-fingerprinting Transforms
 # =============================================================================
 
-def center_crop_and_resize(clip, target_w: int = 1080, target_h: int = 1920):
+def apply_anti_hash_transform(clip, factor: float = 1.04):
     """
-    Center-crops any video clip to a 9:16 aspect ratio bounding box without distortion,
-    then resizes it to the exact target dimensions (default: 1080x1920 vertical).
+    Applies multi-layer anti-fingerprint color adjustment and micro-noise injection.
+    Alters perceptual frame hashes (pHash/dHash/MD5) to completely evade
+    TikTok Content ID duplicate matching without visible quality degradation.
+    """
+    try:
+        import numpy as np
 
-    Algorithm:
-      - Target aspect ratio = target_w / target_h (e.g. 1080/1920 = 0.5625 = 9:16).
-      - Source aspect ratio = w / h.
-      - If src > target (wider than 9:16, e.g. 16:9, 4:3, 1:1):
-          crop_h = h
-          crop_w = round(h * target_ratio)
-          x1 = (w - crop_w) // 2
-          crop box: (x1, 0, x1 + crop_w, h)
-      - If src < target (narrower/taller than 9:16):
-          crop_w = w
-          crop_h = round(w / target_ratio)
-          y1 = (h - crop_h) // 2
-          crop box: (0, y1, w, y1 + crop_h)
-      - Resize cropped clip to (target_w, target_h).
+        def _anti_hash(frame):
+            f = frame.astype("float32") * factor + 1.0
+            noise = np.random.randint(-1, 2, size=frame.shape, dtype="int16")
+            return np.clip(f + noise, 0, 255).astype("uint8")
+
+        return clip.fl_image(_anti_hash)
+    except Exception:
+        return apply_colorx(clip, factor)
+
+
+def center_crop_and_resize(clip, target_w: int = 1080, target_h: int = 1920, zoom_factor: float = 1.05):
+    """
+    Center-crops any video clip to a 9:16 aspect ratio bounding box with micro-zoom
+    to eliminate original watermarks and logos, then resizes to exact target dimensions.
     """
     w, h = clip.size
     target_aspect = target_w / target_h
     src_aspect = w / h
 
-    # If already approximately 9:16 (within 0.1% tolerance)
-    if abs(src_aspect - target_aspect) < 1e-3:
-        if (w, h) == (target_w, target_h):
-            return clip
-        return apply_resize(clip, (target_w, target_h))
+    zf = max(1.0, float(zoom_factor))
 
     if src_aspect > target_aspect:
-        # Source video is wider than 9:16 -> Crop width centered
-        crop_h = h
-        crop_w = int(round(h * target_aspect))
+        # Source video is wider than 9:16 -> Crop width centered with micro-zoom
+        crop_h = max(1, int(h / zf))
+        crop_w = max(1, int(round(crop_h * target_aspect)))
         crop_w = min(crop_w, w)
-        crop_w = max(1, crop_w)
-        x1 = max(0, int((w - crop_w) // 2))
-        y1 = 0
-        x2 = min(w, x1 + crop_w)
-        y2 = h
-    else:
-        # Source video is narrower/taller than 9:16 -> Crop height centered
-        crop_w = w
-        crop_h = int(round(w / target_aspect))
         crop_h = min(crop_h, h)
-        crop_h = max(1, crop_h)
-        x1 = 0
+        x1 = max(0, int((w - crop_w) // 2))
         y1 = max(0, int((h - crop_h) // 2))
-        x2 = w
+        x2 = min(w, x1 + crop_w)
+        y2 = min(h, y1 + crop_h)
+    else:
+        # Source video is narrower/taller than 9:16 -> Crop height centered with micro-zoom
+        crop_w = max(1, int(w / zf))
+        crop_h = max(1, int(round(crop_w / target_aspect)))
+        crop_w = min(crop_w, w)
+        crop_h = min(crop_h, h)
+        x1 = max(0, int((w - crop_w) // 2))
+        y1 = max(0, int((h - crop_h) // 2))
+        x2 = min(w, x1 + crop_w)
         y2 = min(h, y1 + crop_h)
 
     # Sanity checks
@@ -443,8 +443,8 @@ def edit_and_render(
             if source_dur <= 0:
                 continue
 
-            # Determine desired slice length (2.5s to 4.0s)
-            desired_len = random.uniform(2.5, 4.0)
+            # Determine desired slice length (1.8s to 3.2s) to break continuous matching
+            desired_len = random.uniform(1.8, 3.2)
 
             if source_dur <= desired_len:
                 slice_dur = source_dur
@@ -463,18 +463,18 @@ def edit_and_render(
             # Extract subclip
             sub = apply_subclip(curr_source, start_t, end_t)
 
-            # Transformation 1: Mute original ambient/background audio
+            # Transformation 1: Mute 100% of original ambient/background audio (Zero original audio)
             sub = apply_mute(sub)
 
             # Transformation 2: Random horizontal flip (50% probability)
             if random.random() < 0.5:
                 sub = apply_mirror_x(sub)
 
-            # Transformation 3: Slight color adjustment (1.04 luminance/chroma multiplier)
-            sub = apply_colorx(sub, 1.04)
+            # Transformation 3: Anti-hash color grading and micro-noise injection
+            sub = apply_anti_hash_transform(sub, random.uniform(1.03, 1.06))
 
-            # Transformation 4: Center-crop to 9:16 and resize to target resolution (1080x1920)
-            sub = center_crop_and_resize(sub, target_w=target_w, target_h=target_h)
+            # Transformation 4: Micro-zoom 105% & 9:16 center-crop (removes edge logos/watermarks)
+            sub = center_crop_and_resize(sub, target_w=target_w, target_h=target_h, zoom_factor=1.05)
 
             generated_subclips.append(sub)
             accumulated_duration += actual_sub_dur
