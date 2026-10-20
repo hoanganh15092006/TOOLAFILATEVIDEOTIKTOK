@@ -1,0 +1,92 @@
+{
+  "project_name": "TOOLAFILATEVIDEOTIKTOK",
+  "version": "1.1.0",
+  "updated_at": "2026-10-21T00:51:00+07:00",
+  "tools": [
+    {
+      "id": "orchestrator",
+      "name": "Central Pipeline Orchestrator",
+      "file_path": "main.py",
+      "type": "cli_orchestrator",
+      "description": "Điều phối toàn bộ chu trình 4 giai đoạn: Hunter -> AI Brain -> Video Editor -> TikTok Uploader. Hỗ trợ CLI đa năng và giao diện menu tương tác với tính năng [7] Chuyển đổi mục tiêu kênh (Affiliate >1K FL <---> Xây Kênh Kéo Follow <1K FL).",
+      "entry_point": "python main.py [options]",
+      "cli_flags": [
+        "-k / --keyword",
+        "-c / --channel-url",
+        "-m / --max-videos",
+        "--headless",
+        "--skip-upload",
+        "--auto",
+        "--auto-post",
+        "--draft",
+        "--niche",
+        "--style",
+        "--voice",
+        "--loop",
+        "--count",
+        "--affiliate",
+        "--build-channel"
+      ],
+      "dependencies": ["video_hunter", "ai_brain", "video_editor", "tiktok_uploader", "dotenv"],
+      "key_functions": ["run_pipeline", "run_single_pipeline", "preflight_checks"]
+    },
+    {
+      "id": "video_hunter",
+      "name": "Video Hunter & Deduplication",
+      "file_path": "video_hunter.py",
+      "type": "scraper_downloader",
+      "description": "Tìm kiếm và tải video review không watermark bằng yt-dlp, lọc độ dài <= 90s, cơ chế dự phòng Shorts, khử trùng lặp 3 lớp qua history.json.",
+      "entry_point": "Imported module or CLI",
+      "dependencies": ["yt_dlp", "imageio_ffmpeg"],
+      "key_functions": ["hunt_new_videos", "sync_my_channel", "load_history", "save_history", "get_ffmpeg_path"]
+    },
+    {
+      "id": "ai_brain",
+      "name": "AI Brain & Voice Synthesizer",
+      "file_path": "ai_brain.py",
+      "type": "ai_multimodal_tts",
+      "description": "Phân tích video bằng Google Gemini 2.5, sinh kịch bản tiếng Việt 75-90 từ theo phong cách và mục tiêu kênh, làm sạch chỉ dẫn đạo diễn, tổng hợp giọng đọc AI qua edge-tts, và tự động khám phá sản phẩm/chủ đề hot trend.",
+      "entry_point": "Imported module or CLI",
+      "dependencies": ["google-genai", "pydantic", "edge-tts", "dotenv"],
+      "key_functions": ["generate_script", "generate_voice", "discover_trending_products", "sanitize_voiceover", "create_genai_client"]
+    },
+    {
+      "id": "video_editor",
+      "name": "Anti-Fingerprinting Video Editor",
+      "file_path": "video_editor.py",
+      "type": "video_processor",
+      "description": "Biên tập và chống vi phạm bản quyền thuật toán TikTok: cắt ghép subclips ngẫu nhiên, thay đổi tốc độ 1.05x-1.15x, lật ngang khung hình, chuẩn hóa tỷ lệ dọc 1080x1920 (9:16), ghép voiceover mới, dọn dẹp bộ nhớ trên Windows.",
+      "entry_point": "Imported module",
+      "dependencies": ["moviepy", "imageio_ffmpeg"],
+      "key_functions": ["edit_and_render", "create_subclips", "apply_anti_fingerprint_effects", "safe_close_clip"]
+    },
+    {
+      "id": "tiktok_uploader",
+      "name": "TikTok Studio Web Uploader",
+      "file_path": "tiktok_uploader.py",
+      "type": "browser_automation",
+      "description": "Tự động hóa đăng tải video lên TikTok Studio bằng Playwright Chromium với Profile người dùng bền vững (chrome_profile/), nhập caption + 5 hashtag, gắn sản phẩm TikTok Shop Affiliate hoặc lưu bản nháp an toàn.",
+      "entry_point": "Imported module",
+      "dependencies": ["playwright"],
+      "key_functions": ["upload_tiktok_video", "_is_login_page_or_prompt", "_find_file_input", "_find_caption_element"]
+    },
+    {
+      "id": "test_suites",
+      "name": "Verification & Test Infrastructure",
+      "file_path": "test_pipeline.py",
+      "type": "test_suite",
+      "description": "Hệ thống kiểm định tự động đầu cuối bao gồm test_pipeline.py, test_tiktok_uploader.py, test_challenger_adversarial.py, test_adversarial_hunter_brain.py.",
+      "entry_point": "python test_pipeline.py / python test_tiktok_uploader.py",
+      "dependencies": ["unittest", "pytest"]
+    },
+    {
+      "id": "github_sync",
+      "name": "Autonomous Devlog & GitHub Synchronizer",
+      "file_path": ".agents/skills/tool-learner-evaluator/scripts/sync_to_github.py",
+      "type": "sync_tool",
+      "description": "Tự động tạo/cập nhật Devlog, lập chỉ mục README, kiểm tra an toàn tệp nhạy cảm (.env, media), commit chuẩn hóa và push lên GitHub với cơ chế tự rebase khi có conflict.",
+      "entry_point": "python .agents/skills/tool-learner-evaluator/scripts/sync_to_github.py",
+      "dependencies": ["git"]
+    }
+  ]
+}

@@ -30,9 +30,13 @@ history.json
 # IDE & Editor files
 .vscode/
 .idea/
-.agents/
 *.swp
 *.swo
+
+# Agents configuration & memory tracking
+.agents/teamwork/
+.agents/**/scratch/
+.agents/**/*.log
 
 # Virtual environment
 venv/

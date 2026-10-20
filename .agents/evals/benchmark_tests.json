@@ -1,0 +1,132 @@
+{
+  "version": "1.0.0",
+  "name": "TikTok Automation Tool Benchmark Suite",
+  "description": "Bộ tiêu chuẩn định lượng để đối chiếu mã nguồn tool với kinh nghiệm đúc kết trong chu trình tự học",
+  "benchmarks": [
+    {
+      "id": "BM-01-HUNTER",
+      "module": "video_hunter.py",
+      "target_function": "hunt_new_videos",
+      "criteria": [
+        {
+          "name": "duration_filter",
+          "description": "Loại bỏ hoàn toàn video dài hơn 90 giây",
+          "threshold": "duration <= 90s",
+          "critical": true
+        },
+        {
+          "name": "deduplication_integrity",
+          "description": "Không tải lại video ID đã có trong history.json",
+          "threshold": "zero_duplicate_downloads",
+          "critical": true
+        },
+        {
+          "name": "ffmpeg_resolution",
+          "description": "Tự động phân giải imageio_ffmpeg trên hệ điều hành Windows",
+          "threshold": "valid_executable_found",
+          "critical": true
+        }
+      ]
+    },
+    {
+      "id": "BM-02-BRAIN-SCRIPT",
+      "module": "ai_brain.py",
+      "target_function": "generate_script",
+      "criteria": [
+        {
+          "name": "word_count_compliance",
+          "description": "Số từ voiceover tiếng Việt nằm trong khoảng 75 - 90 từ",
+          "threshold": "75 <= word_count <= 90",
+          "critical": true
+        },
+        {
+          "name": "zero_director_notes",
+          "description": "Tuyệt đối không chứa ngoặc đơn (), ngoặc vuông [], nhãn Hook/CTA hoặc chỉ dẫn đạo diễn",
+          "threshold": "regex_check_no_brackets",
+          "critical": true
+        },
+        {
+          "name": "channel_goal_adaptation",
+          "description": "Khi is_affiliate=False, tuyệt đối cấm nhắc tới giỏ hàng/giá tiền/mua hàng; phải tập trung kêu gọi Follow/Thảo luận",
+          "threshold": "strict_negative_constraint_passed",
+          "critical": true
+        },
+        {
+          "name": "hashtag_count",
+          "description": "Caption phải chứa đúng 5 hashtag thịnh hành",
+          "threshold": "hashtag_count == 5",
+          "critical": false
+        }
+      ]
+    },
+    {
+      "id": "BM-03-BRAIN-VOICE",
+      "module": "ai_brain.py",
+      "target_function": "generate_voice",
+      "criteria": [
+        {
+          "name": "audio_duration",
+          "description": "Audio giọng đọc tiếng Việt tạo bởi edge-tts phải <= 30 giây",
+          "threshold": "audio_duration <= 30.0s",
+          "critical": true
+        },
+        {
+          "name": "valid_mp3_header",
+          "description": "File âm thanh xuất ra phải có dung lượng > 500 bytes và cấu trúc mp3 hợp lệ",
+          "threshold": "file_size > 500 bytes",
+          "critical": true
+        }
+      ]
+    },
+    {
+      "id": "BM-04-EDITOR",
+      "module": "video_editor.py",
+      "target_function": "edit_and_render",
+      "criteria": [
+        {
+          "name": "aspect_ratio_and_resolution",
+          "description": "Độ phân giải chuẩn dọc TikTok 1080x1920 (9:16)",
+          "threshold": "width == 1080 and height == 1920",
+          "critical": true
+        },
+        {
+          "name": "audio_video_sync",
+          "description": "Thời lượng video khớp chính xác với thời lượng voiceover (dung sai tối đa 0.2s)",
+          "threshold": "abs(video_dur - audio_dur) <= 0.2s",
+          "critical": true
+        },
+        {
+          "name": "handle_cleanup",
+          "description": "Đóng toàn bộ handle clip và dọn sạch file tạm không để lại lỗi file lock",
+          "threshold": "no_permission_error_on_cleanup",
+          "critical": true
+        }
+      ]
+    },
+    {
+      "id": "BM-05-ORCHESTRATOR",
+      "module": "main.py",
+      "target_function": "run_pipeline",
+      "criteria": [
+        {
+          "name": "target_toggle_mode",
+          "description": "Hỗ trợ chuyển đổi liền mạch mục tiêu [Affiliate] <---> [Xây Kênh] qua tùy chọn [7] và CLI flag",
+          "threshold": "toggle_preserves_state",
+          "critical": true
+        },
+        {
+          "name": "default_fallback",
+          "description": "Khi người dùng nhấn Enter (mặc định), hệ thống tự động suy luận cấu hình tối ưu",
+          "threshold": "safe_default_execution",
+          "critical": true
+        },
+        {
+          "name": "error_boundary",
+          "description": "Xử lý ngoại lệ mượt mà, ghi log rõ ràng và dọn dẹp tài nguyên khi có sự cố",
+          "threshold": "clean_recovery_no_crash",
+          "critical": true
+        }
+      ]
+    }
+  ]
+}
