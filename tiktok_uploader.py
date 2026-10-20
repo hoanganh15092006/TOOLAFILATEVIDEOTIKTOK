@@ -163,7 +163,95 @@ def _find_caption_element(page: Page, timeout_seconds: int = 30) -> Optional[Loc
 
         time.sleep(1.0)
 
-    return None
+def _handle_confirmation_dialogs(page) -> bool:
+    """Checks and clicks any confirmation modals (e.g., Copyright check, Post anyway, Confirm)."""
+    confirm_selectors = [
+        'button:has-text("Post anyway")',
+        'button:has-text("Đăng dù sao đi nữa")',
+        'button:has-text("Vẫn đăng")',
+        'button:has-text("Tiếp tục đăng")',
+        'button:has-text("Confirm")',
+        'button:has-text("Xác nhận")',
+        'button:has-text("Đồng ý")',
+        'div[role="dialog"] button:has-text("Post")',
+        'div[role="dialog"] button:has-text("Đăng")',
+        'button:has-text("Continue")',
+        'button:has-text("Tiếp tục")',
+    ]
+
+    contexts = [page] + list(getattr(page, "frames", []))
+    for ctx in contexts:
+        for sel in confirm_selectors:
+            try:
+                loc = ctx.locator(sel)
+                if loc.count() > 0 and loc.first.is_visible() and loc.first.is_enabled():
+                    logger.info(f"[TikTok Uploader] Detected confirmation modal ('{sel}'). Clicking to continue...")
+                    loc.first.click()
+                    return True
+            except Exception:
+                continue
+    return False
+
+
+def _wait_for_post_completion(page, max_wait_seconds: int = 90) -> bool:
+    """
+    Monitors TikTok Studio page until video upload and publish is 100% confirmed,
+    or until timeout.
+    """
+    success_indicators = [
+        'text="Manage your posts"',
+        'text="Quản lý bài đăng"',
+        'text="Upload another video"',
+        'text="Tải lên video khác"',
+        'text="Your video has been uploaded"',
+        'text="Video của bạn đã được tải lên"',
+        'text="Đã tải lên"',
+        'button:has-text("Manage your posts")',
+        'button:has-text("Quản lý bài đăng")',
+        'button:has-text("Upload another video")',
+        'button:has-text("Tải lên video khác")',
+        'a[href*="tiktokstudio/content"]',
+    ]
+
+    start_time = time.time()
+    last_log_time = 0
+
+    while time.time() - start_time < max_wait_seconds:
+        elapsed = int(time.time() - start_time)
+
+        # 1. Check if URL redirected to content management
+        try:
+            curr_url = page.url or ""
+            if "tiktokstudio/content" in curr_url or "tiktokstudio/manage" in curr_url:
+                logger.info(f"[TikTok Uploader] Video published! Redirected to: {curr_url}")
+                return True
+        except Exception:
+            pass
+
+        # 2. Check for any confirmation modal (like "Post anyway") that may have appeared
+        _handle_confirmation_dialogs(page)
+
+        # 3. Check for success dialog or text
+        contexts = [page] + list(getattr(page, "frames", []))
+        for ctx in contexts:
+            for sel in success_indicators:
+                try:
+                    loc = ctx.locator(sel)
+                    if loc.count() > 0 and loc.first.is_visible():
+                        logger.info(f"[TikTok Uploader] Video publish 100% confirmed! (Found: '{sel}')")
+                        return True
+                except Exception:
+                    continue
+
+        if elapsed - last_log_time >= 5:
+            last_log_time = elapsed
+            logger.info(
+                f"[TikTok Uploader] Đang đợi TikTok Studio tải lên và hoàn tất xử lý ({elapsed}s/{max_wait_seconds}s)..."
+            )
+
+        time.sleep(2.0)
+
+    return False
 
 
 def upload_tiktok_video(
@@ -347,34 +435,55 @@ def upload_tiktok_video(
                     'button[data-e2e="post_video_button"]',
                     'button.btn-post',
                     'button:has-text("Publish")',
+                    'div[role="button"]:has-text("Post")',
+                    'div[role="button"]:has-text("Đăng")',
                 ]
 
-                # Wait up to 45s for video processing to complete and Post button to be enabled
+                # Wait up to 60s for video file to finish uploading and Post button to become enabled
                 btn_start = time.time()
-                while time.time() - btn_start < 45:
-                    for sel in post_selectors:
-                        try:
-                            loc = page.locator(sel)
-                            if loc.count() > 0 and loc.first.is_visible():
-                                is_disabled = loc.first.get_attribute("disabled")
-                                aria_disabled = loc.first.get_attribute("aria-disabled")
-                                if (is_disabled is None or is_disabled == "false") and aria_disabled != "true":
-                                    post_btn = loc.first
-                                    break
-                        except Exception:
-                            continue
+                while time.time() - btn_start < 60:
+                    contexts = [page] + list(getattr(page, "frames", []))
+                    for ctx in contexts:
+                        for sel in post_selectors:
+                            try:
+                                loc = ctx.locator(sel)
+                                if loc.count() > 0 and loc.first.is_visible():
+                                    is_disabled = loc.first.get_attribute("disabled")
+                                    aria_disabled = loc.first.get_attribute("aria-disabled")
+                                    if (is_disabled is None or is_disabled == "false") and aria_disabled != "true":
+                                        post_btn = loc.first
+                                        break
+                            except Exception:
+                                continue
+                        if post_btn:
+                            break
                     if post_btn:
                         break
-                    time.sleep(2.0)
+                    logger.info("[TikTok Uploader] Đang tải video lên TikTok Studio, chờ nút Đăng sẵn sàng...")
+                    time.sleep(3.0)
 
                 if post_btn:
                     try:
                         logger.info("[TikTok Uploader] Clicking Post/Đăng button...")
                         post_btn.click()
-                        time.sleep(6.0)
-                        logger.info("[TikTok Uploader] Video published successfully via Auto-Post!")
+                        time.sleep(3.0)
+
+                        # Handle any popups like Copyright check / Post anyway
+                        _handle_confirmation_dialogs(page)
+
+                        # Wait for TikTok Studio to finish uploading and publishing
+                        logger.info("[TikTok Uploader] Đang chờ TikTok Studio xác nhận đăng tải hoàn tất...")
+                        confirmed = _wait_for_post_completion(page, max_wait_seconds=90)
+                        if confirmed:
+                            logger.info("[TikTok Uploader] Video published successfully and confirmed by TikTok Studio!")
+                        else:
+                            logger.info("[TikTok Uploader] Đã gửi lệnh đăng thành công!")
+
+                        # Grace period: keep browser visible for 15s so user can view the result
+                        logger.info("[TikTok Uploader] Giữ trình duyệt thêm 15 giây để bạn kiểm tra kết quả đăng...")
+                        time.sleep(15.0)
                     except Exception as post_err:
-                        logger.warning(f"[TikTok Uploader] Failed to click Post button: {post_err}")
+                        logger.warning(f"[TikTok Uploader] Failed to click Post button or confirm: {post_err}")
                 else:
                     logger.warning("[TikTok Uploader] Post button was not found or remained disabled. Continuing...")
             elif save_draft:
@@ -389,15 +498,19 @@ def upload_tiktok_video(
                 ]
 
                 btn_start = time.time()
-                while time.time() - btn_start < 30:
-                    for sel in draft_selectors:
-                        try:
-                            loc = page.locator(sel)
-                            if loc.count() > 0 and loc.first.is_visible():
-                                draft_btn = loc.first
-                                break
-                        except Exception:
-                            continue
+                while time.time() - btn_start < 45:
+                    contexts = [page] + list(getattr(page, "frames", []))
+                    for ctx in contexts:
+                        for sel in draft_selectors:
+                            try:
+                                loc = ctx.locator(sel)
+                                if loc.count() > 0 and loc.first.is_visible():
+                                    draft_btn = loc.first
+                                    break
+                            except Exception:
+                                continue
+                        if draft_btn:
+                            break
                     if draft_btn:
                         break
                     time.sleep(2.0)
@@ -406,8 +519,11 @@ def upload_tiktok_video(
                     try:
                         logger.info("[TikTok Uploader] Clicking Save Draft/Lưu nháp button...")
                         draft_btn.click()
-                        time.sleep(5.0)
+                        time.sleep(3.0)
+                        _handle_confirmation_dialogs(page)
                         logger.info("[TikTok Uploader] Video saved to TikTok Studio Drafts successfully!")
+                        logger.info("[TikTok Uploader] Giữ trình duyệt thêm 10 giây để xác nhận lưu nháp...")
+                        time.sleep(10.0)
                     except Exception as draft_err:
                         logger.warning(f"[TikTok Uploader] Failed to click Draft button: {draft_err}")
                 else:
