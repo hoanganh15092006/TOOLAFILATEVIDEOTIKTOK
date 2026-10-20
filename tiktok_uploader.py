@@ -325,7 +325,268 @@ def _find_bottom_action_button(page, action: str = "post"):
             except Exception:
                 continue
 
-    return None
+def _clean_product_search_query(product_name: str) -> str:
+    """
+    Sanitizes product name for TikTok Shop product search by removing emojis,
+    hashtags, and URLs, while preserving Vietnamese diacritics and key brand terms.
+    """
+    import re
+    cleaned = re.sub(r'#\S+', '', product_name)
+    cleaned = re.sub(r'https?://\S+', '', cleaned)
+    cleaned = re.sub(r'[^\w\s\d\-/+.,&]', ' ', cleaned, flags=re.UNICODE)
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    words = cleaned.split()
+    if len(words) > 7:
+        cleaned = " ".join(words[:7])
+    return cleaned
+
+
+def _attach_affiliate_product(page: Page, product_name: str, timeout_seconds: int = 15) -> bool:
+    """
+    Searches and links the exact affiliate product in TikTok Studio / Showcase.
+    
+    If the account does not have TikTok Shop affiliate eligibility or the product
+    anchor button is not found, it gracefully logs and returns False without breaking
+    the upload process.
+    """
+    if not product_name or not product_name.strip():
+        logger.warning("[TikTok Uploader] No product_name provided for affiliate linking.")
+        return False
+
+    clean_query = _clean_product_search_query(product_name)
+    logger.info(f"[TikTok Uploader] Affiliate Linking: Tìm kiếm sản phẩm '{clean_query}'...")
+
+    contexts = [page] + list(getattr(page, "frames", []))
+
+    add_product_selectors = [
+        'button:has-text("Add product")',
+        'button:has-text("Thêm sản phẩm")',
+        'button:has-text("Add link")',
+        'button:has-text("Thêm liên kết")',
+        'button:has-text("Product")',
+        'button:has-text("Sản phẩm")',
+        'div[data-e2e*="product"] button',
+        'div[data-e2e="anchor-product"]',
+        'button[data-e2e*="anchor"]',
+        'div:has-text("Thêm sản phẩm") > button',
+        'span:has-text("Thêm sản phẩm")',
+        'span:has-text("Add product")',
+        'div[class*="anchor"] button',
+        'div[class*="product-anchor"]',
+    ]
+
+    add_btn = None
+    start_time = time.time()
+    while time.time() - start_time < timeout_seconds:
+        try:
+            page.evaluate("window.scrollBy(0, 300)")
+        except Exception:
+            pass
+
+        for ctx in contexts:
+            for sel in add_product_selectors:
+                try:
+                    loc = ctx.locator(sel)
+                    if loc.count() > 0 and loc.first.is_visible():
+                        add_btn = loc.first
+                        break
+                except Exception:
+                    continue
+            if add_btn:
+                break
+        if add_btn:
+            break
+        time.sleep(1.0)
+
+    # Check for commercial content toggle if add_btn not found
+    if not add_btn:
+        commercial_switches = [
+            'input[type="checkbox"][id*="commercial"]',
+            'div:has-text("Commercial content") input[type="checkbox"]',
+            'div:has-text("Nội dung thương mại") input[type="checkbox"]',
+            'div:has-text("Nội dung thương mại") [role="switch"]',
+        ]
+        for ctx in contexts:
+            for c_sel in commercial_switches:
+                try:
+                    sw = ctx.locator(c_sel)
+                    if sw.count() > 0 and sw.first.is_visible():
+                        if not sw.first.is_checked():
+                            sw.first.click()
+                            time.sleep(1.5)
+                            break
+                except Exception:
+                    continue
+
+        for ctx in contexts:
+            for sel in add_product_selectors:
+                try:
+                    loc = ctx.locator(sel)
+                    if loc.count() > 0 and loc.first.is_visible():
+                        add_btn = loc.first
+                        break
+                except Exception:
+                    continue
+            if add_btn:
+                break
+
+    if not add_btn:
+        logger.info(
+            "[TikTok Uploader] Không tìm thấy nút 'Thêm sản phẩm' / 'Add product' "
+            "(tài khoản có thể chưa mở TikTok Shop Creator hoặc chưa có Showcase). "
+            "Tiếp tục đăng bình thường..."
+        )
+        return False
+
+    try:
+        logger.info("[TikTok Uploader] Bấm nút 'Thêm sản phẩm'...")
+        add_btn.scroll_into_view_if_needed()
+        time.sleep(0.5)
+        add_btn.click()
+        time.sleep(2.0)
+    except Exception as e:
+        logger.warning(f"[TikTok Uploader] Không thể bấm nút thêm sản phẩm: {e}")
+        return False
+
+    # Check for sub-menu (Add link -> Product)
+    sub_product_selectors = [
+        'div[role="menuitem"]:has-text("Product")',
+        'div[role="menuitem"]:has-text("Sản phẩm")',
+        'div[role="dialog"] button:has-text("Product")',
+        'div[role="dialog"] button:has-text("Sản phẩm")',
+        'li:has-text("Product")',
+        'li:has-text("Sản phẩm")',
+    ]
+    for ctx in contexts:
+        for sel in sub_product_selectors:
+            try:
+                sub_loc = ctx.locator(sel)
+                if sub_loc.count() > 0 and sub_loc.first.is_visible():
+                    logger.info("[TikTok Uploader] Chọn mục 'Sản phẩm' trong danh mục liên kết...")
+                    sub_loc.first.click()
+                    time.sleep(2.0)
+                    break
+            except Exception:
+                continue
+
+    # Locate Search input
+    search_input_selectors = [
+        'div[role="dialog"] input[type="text"]',
+        'div[role="dialog"] input[type="search"]',
+        'input[placeholder*="Tìm kiếm" i]',
+        'input[placeholder*="Search" i]',
+        'input[placeholder*="sản phẩm" i]',
+        'input[placeholder*="product" i]',
+        'input[type="search"]',
+        'div[class*="modal"] input[type="text"]',
+    ]
+
+    search_input = None
+    search_poll_start = time.time()
+    while time.time() - search_poll_start < 8:
+        for ctx in contexts:
+            for s_sel in search_input_selectors:
+                try:
+                    s_loc = ctx.locator(s_sel)
+                    if s_loc.count() > 0 and s_loc.first.is_visible():
+                        search_input = s_loc.first
+                        break
+                except Exception:
+                    continue
+            if search_input:
+                break
+        if search_input:
+            break
+        time.sleep(1.0)
+
+    if not search_input:
+        logger.warning("[TikTok Uploader] Không tìm thấy ô tìm kiếm sản phẩm trong hộp thoại.")
+        return False
+
+    try:
+        logger.info(f"[TikTok Uploader] Nhập tên sản phẩm để tìm kiếm: '{clean_query}'...")
+        search_input.click()
+        search_input.fill("")
+        search_input.fill(clean_query)
+        time.sleep(0.5)
+        page.keyboard.press("Enter")
+        time.sleep(3.0)
+    except Exception as e:
+        logger.warning(f"[TikTok Uploader] Lỗi khi nhập tên sản phẩm: {e}")
+        return False
+
+    # Select the first matching product from search results
+    item_add_selectors = [
+        'div[role="dialog"] button:has-text("Add")',
+        'div[role="dialog"] button:has-text("Thêm")',
+        'div[role="dialog"] button:has-text("Chọn")',
+        'div[role="dialog"] button:has-text("Select")',
+        'div[class*="product-item"] button',
+        'div[class*="goods-item"] button',
+        'div[role="row"] button:has-text("Add")',
+        'div[role="row"] button:has-text("Thêm")',
+    ]
+
+    add_item_btn = None
+    item_poll_start = time.time()
+    while time.time() - item_poll_start < 8:
+        for ctx in contexts:
+            for sel in item_add_selectors:
+                try:
+                    loc = ctx.locator(sel)
+                    if loc.count() > 0 and loc.first.is_visible():
+                        add_item_btn = loc.first
+                        break
+                except Exception:
+                    continue
+            if add_item_btn:
+                break
+        if add_item_btn:
+            break
+        time.sleep(1.0)
+
+    if not add_item_btn:
+        logger.info(f"[TikTok Uploader] Không tìm thấy sản phẩm '{clean_query}' trong danh sách kết quả.")
+        try:
+            cancel = page.locator('div[role="dialog"] button:has-text("Cancel"), div[role="dialog"] [aria-label="Close"]')
+            if cancel.count() > 0 and cancel.first.is_visible():
+                cancel.first.click()
+        except Exception:
+            pass
+        return False
+
+    try:
+        logger.info(f"[TikTok Uploader] Đã tìm thấy sản phẩm chính xác! Bấm 'Thêm'...")
+        add_item_btn.click()
+        time.sleep(2.0)
+    except Exception as e:
+        logger.warning(f"[TikTok Uploader] Lỗi khi bấm thêm sản phẩm: {e}")
+        return False
+
+    # Check for confirmation modal / Save button
+    confirm_selectors = [
+        'div[role="dialog"] button:has-text("Confirm")',
+        'div[role="dialog"] button:has-text("Xác nhận")',
+        'div[role="dialog"] button:has-text("Done")',
+        'div[role="dialog"] button:has-text("Hoàn thành")',
+        'div[role="dialog"] button:has-text("Save")',
+        'div[role="dialog"] button:has-text("Lưu")',
+        'button:has-text("Thêm"):not([disabled])',
+    ]
+    for ctx in contexts:
+        for c_sel in confirm_selectors:
+            try:
+                c_loc = ctx.locator(c_sel)
+                if c_loc.count() > 0 and c_loc.first.is_visible():
+                    logger.info("[TikTok Uploader] Xác nhận gắn liên kết sản phẩm...")
+                    c_loc.first.click()
+                    time.sleep(2.0)
+                    break
+            except Exception:
+                continue
+
+    logger.info(f"[TikTok Uploader] Gắn sản phẩm Affiliate thành công: '{clean_query}'!")
+    return True
 
 
 def upload_tiktok_video(
@@ -338,6 +599,8 @@ def upload_tiktok_video(
     raise_on_error: bool = False,
     auto_post: bool = False,
     save_draft: bool = False,
+    is_affiliate: bool = False,
+    product_name: Optional[str] = None,
 ) -> bool:
     """
     Automates uploading a video to TikTok Studio using Playwright Chromium persistent context.
@@ -498,6 +761,20 @@ def upload_tiktok_video(
                     logger.warning(
                         "[TikTok Uploader] Caption field not found within timeout. Continuing to review window..."
                     )
+
+            # 6b. Affiliate Product Linking (if enabled)
+            if is_affiliate and product_name:
+                logger.info(f"[TikTok Uploader] Đang tìm và gắn sản phẩm Affiliate '{product_name}'...")
+                try:
+                    attached = _attach_affiliate_product(page, product_name=product_name)
+                    if attached:
+                        logger.info(f"[TikTok Uploader] Đã gắn thành công sản phẩm affiliate: '{product_name}'")
+                    else:
+                        logger.info(
+                            "[TikTok Uploader] Tiếp tục quy trình (không gắn link affiliate nếu tài khoản chưa hỗ trợ hoặc không tìm thấy sản phẩm)."
+                        )
+                except Exception as aff_err:
+                    logger.warning(f"[TikTok Uploader] Lỗi khi xử lý gắn sản phẩm affiliate: {aff_err}")
 
             # 7. Post video or Review window
             if auto_post:
@@ -720,6 +997,17 @@ if __name__ == "__main__":
         dest="save_draft",
         help="Automatically save video as Draft instead of posting",
     )
+    parser.add_argument(
+        "--affiliate",
+        action="store_true",
+        default=False,
+        help="Enable TikTok Shop Affiliate product linking mode",
+    )
+    parser.add_argument(
+        "--product-name",
+        default=None,
+        help="Product name to search and attach as TikTok Shop affiliate anchor link",
+    )
 
     args = parser.parse_args()
 
@@ -732,5 +1020,7 @@ if __name__ == "__main__":
         review_duration=args.review_duration,
         auto_post=args.auto_post,
         save_draft=args.save_draft,
+        is_affiliate=args.affiliate,
+        product_name=args.product_name,
     )
     sys.exit(0 if success else 1)

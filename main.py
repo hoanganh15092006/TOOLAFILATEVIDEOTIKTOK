@@ -212,6 +212,8 @@ def run_single_pipeline(
                 "video_path": rendered_path,
                 "caption": caption,
                 "headless": headless,
+                "is_affiliate": is_affiliate,
+                "product_name": product_name,
             }
             if auto_post:
                 upload_kwargs["auto_post"] = True

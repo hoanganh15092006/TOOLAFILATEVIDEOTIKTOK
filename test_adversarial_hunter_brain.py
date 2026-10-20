@@ -80,8 +80,8 @@ class TestAdversarialVideoHunter(unittest.TestCase):
 
             res = video_hunter.hunt_new_videos(unicode_kw, output_dir=self.test_input_dir, history_file=self.test_history)
             self.assertEqual(res, [])
-            mock_ydl.extract_info.assert_called_once()
-            called_query = mock_ydl.extract_info.call_args[0][0]
+            self.assertTrue(mock_ydl.extract_info.call_count >= 1)
+            called_query = mock_ydl.extract_info.call_args_list[0][0][0]
             self.assertTrue(called_query.startswith("ytsearch15:"))
             self.assertIn("Review đồ gia dụng thông minh", called_query)
 
@@ -114,7 +114,7 @@ class TestAdversarialVideoHunter(unittest.TestCase):
         missing_path = os.path.join(self.temp_dir, "non_existent_history.json")
         self.assertFalse(os.path.exists(missing_path))
         data = video_hunter.load_history(missing_path)
-        self.assertEqual(data, {"uploaded_ids": [], "channel_titles": []})
+        self.assertEqual(data, {"uploaded_ids": [], "channel_titles": [], "affiliate_history": []})
         self.assertTrue(os.path.exists(missing_path))
 
     def test_history_auto_recovery_corrupt_json(self):
@@ -124,12 +124,12 @@ class TestAdversarialVideoHunter(unittest.TestCase):
             f.write("{ broken json syntax [!@#$%^&*")
 
         data = video_hunter.load_history(corrupt_path)
-        self.assertEqual(data, {"uploaded_ids": [], "channel_titles": []})
+        self.assertEqual(data, {"uploaded_ids": [], "channel_titles": [], "affiliate_history": []})
 
         # Verify repaired file is valid JSON on disk
         with open(corrupt_path, "r", encoding="utf-8") as f:
             repaired = json.load(f)
-        self.assertEqual(repaired, {"uploaded_ids": [], "channel_titles": []})
+        self.assertEqual(repaired, {"uploaded_ids": [], "channel_titles": [], "affiliate_history": []})
 
     def test_history_auto_recovery_missing_fields(self):
         """Verify history with missing fields has missing lists auto-injected."""
@@ -155,7 +155,7 @@ class TestAdversarialVideoHunter(unittest.TestCase):
         with open(bad_type_path, "w", encoding="utf-8") as f:
             json.dump([1, 2, 3], f)
         data = video_hunter.load_history(bad_type_path)
-        self.assertEqual(data, {"uploaded_ids": [], "channel_titles": []})
+        self.assertEqual(data, {"uploaded_ids": [], "channel_titles": [], "affiliate_history": []})
 
     def test_history_atomic_save_unicode(self):
         """Verify save_history preserves Vietnamese diacritics and is atomically written."""

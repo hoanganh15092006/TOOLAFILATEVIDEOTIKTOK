@@ -149,6 +149,67 @@ class TestTikTokUploader(unittest.TestCase):
         )
         self.assertFalse(res)
 
+    def test_clean_product_search_query(self):
+        raw = "🔥 Nồi chiên không dầu Lock&Lock 5.2L cực xịn 2026! #affiliate #review https://tiktok.com"
+        cleaned = tiktok_uploader._clean_product_search_query(raw)
+        self.assertNotIn("🔥", cleaned)
+        self.assertNotIn("#affiliate", cleaned)
+        self.assertNotIn("https://", cleaned)
+        self.assertIn("Nồi chiên không dầu Lock&Lock", cleaned)
+
+    def test_attach_affiliate_product_empty_name(self):
+        page = MagicMock()
+        res = tiktok_uploader._attach_affiliate_product(page, "")
+        self.assertFalse(res)
+
+    def test_attach_affiliate_product_not_found(self):
+        page = MagicMock()
+        page.locator.return_value.count.return_value = 0
+        page.frames = []
+        res = tiktok_uploader._attach_affiliate_product(page, "Bình giữ nhiệt", timeout_seconds=1)
+        self.assertFalse(res)
+
+    def test_attach_affiliate_product_success_flow(self):
+        page = MagicMock()
+        page.frames = []
+
+        mock_add_btn = MagicMock()
+        mock_add_btn.is_visible.return_value = True
+
+        mock_search_input = MagicMock()
+        mock_search_input.is_visible.return_value = True
+
+        mock_item_btn = MagicMock()
+        mock_item_btn.is_visible.return_value = True
+
+        mock_confirm_btn = MagicMock()
+        mock_confirm_btn.is_visible.return_value = True
+
+        def locator_side_effect(sel):
+            loc = MagicMock()
+            if "Add product" in sel or "Thêm sản phẩm" in sel or "Add link" in sel:
+                loc.count.return_value = 1
+                loc.first = mock_add_btn
+            elif "input" in sel:
+                loc.count.return_value = 1
+                loc.first = mock_search_input
+            elif "button:has-text(\"Add\")" in sel or "button:has-text(\"Thêm\")" in sel:
+                loc.count.return_value = 1
+                loc.first = mock_item_btn
+            elif "button:has-text(\"Confirm\")" in sel or "button:has-text(\"Xác nhận\")" in sel:
+                loc.count.return_value = 1
+                loc.first = mock_confirm_btn
+            else:
+                loc.count.return_value = 0
+            return loc
+
+        page.locator.side_effect = locator_side_effect
+        res = tiktok_uploader._attach_affiliate_product(page, "Tai nghe bluetooth F9 Pro", timeout_seconds=2)
+        self.assertTrue(res)
+        mock_add_btn.click.assert_called()
+        mock_search_input.fill.assert_called()
+        mock_item_btn.click.assert_called()
+
 
 if __name__ == "__main__":
     unittest.main()

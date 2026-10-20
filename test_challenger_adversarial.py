@@ -379,6 +379,8 @@ class TestMainAdversarial(unittest.TestCase):
             video_path="output_videos/final_video.mp4",
             caption="Tai nghe xịn #review",
             headless=True,
+            is_affiliate=True,
+            product_name="Tai nghe bluetooth",
         )
 
     @patch("main.video_hunter")
