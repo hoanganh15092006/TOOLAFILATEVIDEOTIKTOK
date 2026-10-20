@@ -249,9 +249,83 @@ def _wait_for_post_completion(page, max_wait_seconds: int = 90) -> bool:
                 f"[TikTok Uploader] Đang đợi TikTok Studio tải lên và hoàn tất xử lý ({elapsed}s/{max_wait_seconds}s)..."
             )
 
-        time.sleep(2.0)
-
+def _dismiss_exit_dialog(page) -> bool:
+    """If 'Are you sure you want to exit?' dialog is open, clicks Cancel to stay on page."""
+    contexts = [page] + list(getattr(page, "frames", []))
+    for ctx in contexts:
+        try:
+            cancel_btn = ctx.locator('div[role="dialog"] button:has-text("Cancel"), div[role="dialog"] button:has-text("Hủy")')
+            if cancel_btn.count() > 0 and cancel_btn.first.is_visible():
+                logger.info("[TikTok Uploader] Found 'Are you sure you want to exit?' dialog. Clicking Cancel to stay on upload page...")
+                cancel_btn.first.click()
+                time.sleep(1.0)
+                return True
+        except Exception:
+            continue
     return False
+
+
+def _find_bottom_action_button(page, action: str = "post"):
+    """
+    Finds the actual submit button (Post or Save Draft) located at the bottom of the upload form.
+    Filters out navigation / sidebar buttons by ensuring candidate has y > 200 and selects the bottom-most button.
+    """
+    if action == "post":
+        selectors = [
+            'button[data-e2e="post_video_button"]',
+            'div.btn-post button',
+            'button.btn-post',
+            'div[class*="btn-post"] button',
+            'button:text-is("Post")',
+            'button:text-is("Đăng")',
+            'button:text-is("Publish")',
+            'div[class*="button-group"] button:text-is("Post")',
+            'div[class*="button-group"] button:text-is("Đăng")',
+        ]
+    else:  # draft
+        selectors = [
+            'button[data-e2e="save_draft_button"]',
+            'button:text-is("Save draft")',
+            'button:text-is("Lưu nháp")',
+            'button:text-is("Lưu làm bản nháp")',
+            'div[class*="button-group"] button:text-is("Save draft")',
+            'div[class*="button-group"] button:text-is("Lưu nháp")',
+        ]
+
+    candidates = []
+    contexts = [page] + list(getattr(page, "frames", []))
+    for ctx in contexts:
+        for sel in selectors:
+            try:
+                loc = ctx.locator(sel)
+                count = loc.count()
+                for i in range(count):
+                    btn = loc.nth(i)
+                    if btn.is_visible():
+                        box = btn.bounding_box()
+                        y = box["y"] if box else 0
+                        # Must be below top navigation (y > 200px)
+                        if y > 200:
+                            candidates.append((y, btn))
+            except Exception:
+                continue
+
+    if candidates:
+        # Sort by y-coordinate descending to get the bottom-most action button
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        return candidates[0][1]
+
+    # Fallback to first visible exact match if bounding boxes aren't available
+    for ctx in contexts:
+        for sel in selectors:
+            try:
+                loc = ctx.locator(sel)
+                if loc.count() > 0 and loc.first.is_visible():
+                    return loc.first
+            except Exception:
+                continue
+
+    return None
 
 
 def upload_tiktok_video(
@@ -427,45 +501,70 @@ def upload_tiktok_video(
 
             # 7. Post video or Review window
             if auto_post:
-                logger.info("[TikTok Uploader] Auto-post enabled. Searching for Post/Đăng button...")
-                post_btn = None
-                post_selectors = [
-                    'button:has-text("Post")',
-                    'button:has-text("Đăng")',
-                    'button[data-e2e="post_video_button"]',
-                    'button.btn-post',
-                    'button:has-text("Publish")',
-                    'div[role="button"]:has-text("Post")',
-                    'div[role="button"]:has-text("Đăng")',
-                ]
+                logger.info("[TikTok Uploader] Auto-post enabled. Preparing to publish video...")
 
-                # Wait up to 60s for video file to finish uploading and Post button to become enabled
+                # Dismiss any accidental exit dialogs if open
+                _dismiss_exit_dialog(page)
+
+                # Scroll down to make sure bottom action bar is rendered in DOM
+                try:
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    time.sleep(1.0)
+                except Exception:
+                    pass
+
+                # Wait for video processing / cover thumbnail generation to finish
+                cover_wait_start = time.time()
+                while time.time() - cover_wait_start < 45:
+                    try:
+                        loading_loc = page.locator('text="Loading...", text="Đang tải...", text="Processing...", text="Đang xử lý..."')
+                        if loading_loc.count() == 0 or not loading_loc.first.is_visible():
+                            break
+                    except Exception:
+                        break
+                    logger.info("[TikTok Uploader] Đang đợi TikTok Studio xử lý video & tạo ảnh bìa (Cover)...")
+                    time.sleep(3.0)
+
+                # Search and wait for the real bottom Post/Đăng button
+                post_btn = None
                 btn_start = time.time()
                 while time.time() - btn_start < 60:
-                    contexts = [page] + list(getattr(page, "frames", []))
-                    for ctx in contexts:
-                        for sel in post_selectors:
-                            try:
-                                loc = ctx.locator(sel)
-                                if loc.count() > 0 and loc.first.is_visible():
-                                    is_disabled = loc.first.get_attribute("disabled")
-                                    aria_disabled = loc.first.get_attribute("aria-disabled")
-                                    if (is_disabled is None or is_disabled == "false") and aria_disabled != "true":
-                                        post_btn = loc.first
-                                        break
-                            except Exception:
-                                continue
-                        if post_btn:
+                    _dismiss_exit_dialog(page)
+                    try:
+                        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    except Exception:
+                        pass
+
+                    btn = _find_bottom_action_button(page, action="post")
+                    if btn:
+                        # Check if disabled
+                        is_disabled = False
+                        try:
+                            disabled_attr = btn.get_attribute("disabled")
+                            aria_disabled = btn.get_attribute("aria-disabled")
+                            classes = btn.get_attribute("class") or ""
+                            if disabled_attr is not None or aria_disabled == "true" or "disabled" in classes.lower():
+                                is_disabled = True
+                        except Exception:
+                            pass
+
+                        if not is_disabled:
+                            post_btn = btn
                             break
-                    if post_btn:
-                        break
-                    logger.info("[TikTok Uploader] Đang tải video lên TikTok Studio, chờ nút Đăng sẵn sàng...")
+
+                    logger.info("[TikTok Uploader] Video đang được tải lên TikTok Studio, chờ nút Đăng sẵn sàng...")
                     time.sleep(3.0)
 
                 if post_btn:
                     try:
-                        logger.info("[TikTok Uploader] Clicking Post/Đăng button...")
-                        post_btn.click()
+                        logger.info("[TikTok Uploader] Clicking Post/Đăng button at bottom of page...")
+                        post_btn.scroll_into_view_if_needed()
+                        time.sleep(1.0)
+                        try:
+                            post_btn.click()
+                        except Exception:
+                            post_btn.evaluate("el => el.click()")
+
                         time.sleep(3.0)
 
                         # Handle any popups like Copyright check / Post anyway
@@ -487,37 +586,28 @@ def upload_tiktok_video(
                 else:
                     logger.warning("[TikTok Uploader] Post button was not found or remained disabled. Continuing...")
             elif save_draft:
-                logger.info("[TikTok Uploader] Save Draft enabled. Searching for Save Draft/Lưu nháp button...")
-                draft_btn = None
-                draft_selectors = [
-                    'button:has-text("Save draft")',
-                    'button:has-text("Lưu nháp")',
-                    'button:has-text("Lưu làm bản nháp")',
-                    'button[data-e2e="save_draft_button"]',
-                    'button:has-text("Draft")',
-                ]
+                logger.info("[TikTok Uploader] Save Draft enabled. Searching for Save Draft button...")
+                _dismiss_exit_dialog(page)
+                try:
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    time.sleep(1.0)
+                except Exception:
+                    pass
 
+                draft_btn = None
                 btn_start = time.time()
                 while time.time() - btn_start < 45:
-                    contexts = [page] + list(getattr(page, "frames", []))
-                    for ctx in contexts:
-                        for sel in draft_selectors:
-                            try:
-                                loc = ctx.locator(sel)
-                                if loc.count() > 0 and loc.first.is_visible():
-                                    draft_btn = loc.first
-                                    break
-                            except Exception:
-                                continue
-                        if draft_btn:
-                            break
-                    if draft_btn:
+                    btn = _find_bottom_action_button(page, action="draft")
+                    if btn:
+                        draft_btn = btn
                         break
                     time.sleep(2.0)
 
                 if draft_btn:
                     try:
                         logger.info("[TikTok Uploader] Clicking Save Draft/Lưu nháp button...")
+                        draft_btn.scroll_into_view_if_needed()
+                        time.sleep(1.0)
                         draft_btn.click()
                         time.sleep(3.0)
                         _handle_confirmation_dialogs(page)
