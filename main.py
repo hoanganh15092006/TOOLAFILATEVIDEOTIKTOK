@@ -104,6 +104,7 @@ def run_single_pipeline(
     product_name_hint: Optional[str] = None,
     style: str = "trend",
     voice: str = "vi-VN-HoaiMyNeural",
+    is_affiliate: bool = True,
 ) -> bool:
     """
     Executes stages 1-4 for a single keyword:
@@ -142,11 +143,15 @@ def run_single_pipeline(
     # Stage 2: AI Brain (Script Generation & Voice Synthesis)
     # -------------------------------------------------------------------------
     first_video = downloaded_videos[0]
-    logger.info(f"[STAGE 2/4] Analyzing first downloaded video with Gemini (style='{style}'): {first_video}")
+    mode_label = "Affiliate Bán Hàng (>1K FL)" if is_affiliate else "Xây Kênh Kéo Follow (<1K FL)"
+    logger.info(
+        f"[STAGE 2/4] Analyzing first downloaded video with Gemini "
+        f"(style='{style}', mode='{mode_label}'): {first_video}"
+    )
 
     try:
-        if style and style != "trend":
-            script_data = ai_brain.generate_script(first_video, style=style)
+        if (style and style != "trend") or not is_affiliate:
+            script_data = ai_brain.generate_script(first_video, style=style, is_affiliate=is_affiliate)
         else:
             script_data = ai_brain.generate_script(first_video)
     except Exception as exc:
@@ -157,9 +162,9 @@ def run_single_pipeline(
     voiceover_text = script_data.get("voiceover", "")
     caption = script_data.get("caption", "")
 
-    logger.info(f"[STAGE 2/4] Identified Product: {product_name}")
+    logger.info(f"[STAGE 2/4] Identified Topic/Product: {product_name}")
     logger.info(
-        f"[STAGE 2/4] Generated Script ({len(voiceover_text.split())} words, style='{style}'):\n"
+        f"[STAGE 2/4] Generated Script ({len(voiceover_text.split())} words, style='{style}', mode='{mode_label}'):\n"
         f"------------\n{voiceover_text}\n------------"
     )
     logger.info(f"[STAGE 2/4] Generated Caption:\n{caption}")
@@ -245,12 +250,14 @@ def run_pipeline(
     niche: Optional[str] = None,
     style: str = "trend",
     voice: str = "vi-VN-HoaiMyNeural",
+    is_affiliate: bool = True,
 ) -> None:
     """
     Central orchestrator coordinating all pipeline stages:
       Preflight -> Channel Sync (opt) -> Video Hunter -> AI Brain -> Video Editor -> TikTok Uploader
 
     Supports rich customization:
+      - Channel Objective: Affiliate (>1K FL, CTA cart) vs Channel Building (<1K FL, CTA follow)
       - Niche targeting (home, tech, beauty, decor, fashion)
       - Script style customization (trend, drama, fomo, review)
       - Voiceover selection (female: HoaiMy, male: NamMinh)
@@ -272,6 +279,7 @@ def run_pipeline(
         niche: Filter products by niche ('home', 'tech', 'beauty', 'decor', 'fashion').
         style: Script style ('trend', 'drama', 'fomo', 'review').
         voice: edge-tts voice or alias ('female', 'male').
+        is_affiliate: True for Affiliate Selling (>1K FL), False for Channel Building (<1K FL).
     """
     print_banner()
 
@@ -293,27 +301,57 @@ def run_pipeline(
         search_keyword = search_keyword.strip()
 
     if not search_keyword and not auto_mode:
-        try:
-            print("\n" + "=" * 70)
-            print("   TIKTOK AFFILIATE AUTOMATION - TRUNG TÂM ĐIỀU KHIỂN AUTO-PILOT")
-            print("=" * 70)
-            print("  [1] Tự Động Hoàn Toàn & Đăng Ngay (AI tự tìm trend, làm video, tự đăng)")
-            print("  [2] Tự Động Lưu Vào Bản Nháp (Tạo video & tự lưu Draft trên TikTok Studio)")
-            print("  [3] Chọn Ngành Hàng Hot Trend (Gia dụng, Công nghệ, Mỹ phẩm, Thời trang...)")
-            print("  [4] Chọn Phong Cách Kịch Bản (Bắt trend Gen Z, Kịch tính drama, Flash sale)")
-            print("  [5] Vòng Lặp Tự Động Liên Tục (Tự sản xuất liên tục N video theo chu kỳ)")
-            print("  [6] Thủ Công (Tự nhập từ khóa sản phẩm cụ thể bạn muốn làm)")
-            print("-" * 70)
-            user_choice = input("Lựa chọn của bạn [Mặc định: 1 - Tự động đăng]: ").strip()
-            print("-" * 70 + "\n")
-        except (EOFError, KeyboardInterrupt):
-            print("\n[!] Input aborted by user. Exiting pipeline.")
-            return
+        while True:
+            target_str = "[CÓ AFFILIATE BÁN HÀNG - KÊNH >1K FL]" if is_affiliate else "[XÂY KÊNH KÉO FOLLOW - KÊNH <1K FL]"
+            try:
+                print("\n" + "=" * 72)
+                print("   TIKTOK AUTOMATION - TRUNG TÂM SẢN XUẤT VIDEO TỰ ĐỘNG")
+                print("=" * 72)
+                print(f"  MỤC TIÊU KÊNH HIỆN TẠI: >>> {target_str} <<<")
+                print("-" * 72)
+                print("  [1] Tự Động Hoàn Toàn & ĐĂNG NGAY (Tìm trend, làm video & tự đăng)")
+                print("  [2] Tự Động & Lưu Vào BẢN NHÁP (Tạo video & lưu Draft TikTok Studio)")
+                print("  [3] Chọn Ngành Hàng Hot Trend (Gia dụng / Công nghệ / Mỹ phẩm...)")
+                print("  [4] Chọn Phong Cách Kịch Bản (Trend / Drama / FOMO / Review)")
+                print("  [5] Vòng Lặp Tự Động Liên Tục (Chạy chuỗi nhiều video tự động)")
+                print("  [6] Chế Độ Thủ Công (Tùy biến từ khóa theo ý muốn)")
+                print("  [7] Đổi Mục Tiêu: [Có Affiliate >1K FL] <---> [Xây Kênh Kéo Follow]")
+                print("  [0] Thoát")
+                print("-" * 72)
+                user_choice = input("Lựa chọn của bạn [Mặc định: 1 - Tự động đăng]: ").strip()
+                print("-" * 72 + "\n")
+            except (EOFError, KeyboardInterrupt):
+                print("\n[!] Input aborted by user. Exiting pipeline.")
+                return
+
+            if user_choice == "0" or user_choice.lower() == "exit":
+                print("[!] Exiting pipeline.")
+                return
+            elif user_choice == "7" or user_choice.lower() == "toggle":
+                is_affiliate = not is_affiliate
+                print(f">>> Đã chuyển mục tiêu sang: {'[Có Affiliate >1K FL]' if is_affiliate else '[Xây Kênh Kéo Follow]'}")
+                continue
+            else:
+                break
+
+        def ask_channel_type(current_aff: bool) -> bool:
+            try:
+                curr_desc = "1: Affiliate >1k fl" if current_aff else "2: Xây kênh kéo follow"
+                ans = input(f"Xác nhận loại kênh [1: Affiliate >1k fl, 2: Xây kênh kéo follow] [Mặc định: {curr_desc}]: ").strip()
+                if ans == "1":
+                    return True
+                elif ans == "2":
+                    return False
+            except (EOFError, KeyboardInterrupt):
+                pass
+            return current_aff
 
         if user_choice == "2" or user_choice.lower() == "draft":
+            is_affiliate = ask_channel_type(is_affiliate)
             auto_mode = True
             save_draft = True
         elif user_choice == "3" or user_choice.lower() == "niche":
+            is_affiliate = ask_channel_type(is_affiliate)
             auto_mode = True
             try:
                 print("Chọn ngành hàng hot trend:")
@@ -333,6 +371,7 @@ def run_pipeline(
             except (EOFError, KeyboardInterrupt):
                 niche = "home"
         elif user_choice == "4" or user_choice.lower() == "style":
+            is_affiliate = ask_channel_type(is_affiliate)
             auto_mode = True
             try:
                 print("Chọn phong cách kịch bản:")
@@ -351,6 +390,7 @@ def run_pipeline(
             except (EOFError, KeyboardInterrupt):
                 style = "trend"
         elif user_choice == "5" or user_choice.lower() == "loop":
+            is_affiliate = ask_channel_type(is_affiliate)
             auto_mode = True
             loop = True
             try:
@@ -371,14 +411,24 @@ def run_pipeline(
                 search_keyword = user_choice
             else:
                 try:
-                    search_keyword = input("Nhập từ khóa sản phẩm để săn video: ").strip()
+                    search_keyword = input("Nhập từ khóa sản phẩm / chủ đề để săn video: ").strip()
                 except (EOFError, KeyboardInterrupt):
                     return
             if not search_keyword:
                 logger.warning("No search keyword provided. Exiting pipeline.")
                 return
+            is_affiliate = ask_channel_type(is_affiliate)
+            try:
+                action_c = input("Tự động đăng ngay hay Lưu nháp? [1: Đăng ngay, 2: Lưu nháp, 3: Xem lại]: ").strip()
+                if action_c == "1":
+                    auto_post = True
+                elif action_c == "2":
+                    save_draft = True
+            except (EOFError, KeyboardInterrupt):
+                pass
         else:
             # Option 1 / Default: Auto-Pilot with Auto-Post
+            is_affiliate = ask_channel_type(is_affiliate)
             auto_mode = True
             auto_post = True
 
@@ -396,7 +446,8 @@ def run_pipeline(
         current_hint = None
 
         if auto_mode or not current_keyword:
-            logger.info(f"[AUTO-PILOT] Đang tìm kiếm sản phẩm hot trend TikTok Shop (ngành: {niche or 'Tất cả'})...")
+            mode_desc = "Sản phẩm Hot Trend TikTok Shop (Affiliate)" if is_affiliate else "Sản phẩm / Mẹo độc lạ Xây Kênh Kéo Follow"
+            logger.info(f"[AUTO-PILOT] Đang tìm kiếm {mode_desc} (ngành: {niche or 'Tất cả'})...")
             history = video_hunter.load_history()
             excluded = list(
                 set(history.get("affiliate_history", []) + history.get("channel_titles", []))
@@ -406,6 +457,7 @@ def run_pipeline(
                 exclude_keywords=excluded,
                 count=5,
                 niche=niche,
+                is_affiliate=is_affiliate,
             )
 
             if discovered:
@@ -414,7 +466,7 @@ def run_pipeline(
                 current_hint = chosen["name"]
                 cat = chosen.get("category", "Trending")
                 logger.info(
-                    f"[AUTO-PILOT] Đã chọn sản phẩm: '{current_hint}' | "
+                    f"[AUTO-PILOT] Đã chọn: '{current_hint}' | "
                     f"Ngành hàng: {cat} | Từ khóa săn video: '{current_keyword}'"
                 )
 
@@ -439,6 +491,7 @@ def run_pipeline(
             product_name_hint=current_hint,
             style=style,
             voice=voice,
+            is_affiliate=is_affiliate,
         )
 
         # Handle pause between loops
@@ -546,6 +599,19 @@ def main() -> None:
         help="Số lượng video affiliate cần sản xuất trong chế độ vòng lặp (mặc định: 3)",
     )
     parser.add_argument(
+        "--affiliate",
+        action="store_true",
+        dest="is_affiliate",
+        default=True,
+        help="Chế độ Affiliate TikTok Shop: Kênh >1k follow, kêu gọi giỏ hàng góc trái (Mặc định)",
+    )
+    parser.add_argument(
+        "--build-channel", "--no-affiliate",
+        action="store_false",
+        dest="is_affiliate",
+        help="Chế độ Xây Kênh Kéo Follow: Kênh <1k follow, kêu gọi follow/tim/bình luận, không nhắc mua hàng",
+    )
+    parser.add_argument(
         "--interval",
         dest="loop_interval",
         type=int,
@@ -570,6 +636,7 @@ def main() -> None:
         niche=args.niche,
         style=args.style,
         voice=args.voice,
+        is_affiliate=args.is_affiliate,
     )
 
 

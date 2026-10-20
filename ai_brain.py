@@ -34,38 +34,66 @@ SCRIPT_STYLE_GUIDES = {
 }
 
 
-def get_script_prompt(style: str = "trend") -> str:
-    """Returns specialized prompt template according to requested script style."""
+def get_script_prompt(style: str = "trend", is_affiliate: bool = True) -> str:
+    """Returns specialized prompt template according to requested script style and channel objective."""
     style_guide = SCRIPT_STYLE_GUIDES.get(str(style).lower(), SCRIPT_STYLE_GUIDES["trend"])
+
+    if is_affiliate:
+        channel_role = "Bạn là một chuyên gia sáng tạo nội dung video TikTok Affiliate hàng đầu tại Việt Nam."
+        script_type = "tiếp thị liên kết (affiliate script) cực kỳ cuốn hút"
+        cta_instruction = (
+            "Phần kết: Kêu gọi hành động (Call To Action - CTA) dứt khoát: "
+            "hướng dẫn người xem bấm ngay vào GIỎ HÀNG GÓC TRÁI BÊN DƯỚI màn hình để mua với giá ưu đãi."
+        )
+        caption_instruction = (
+            "Viết caption đăng TikTok ngắn gọn, hấp dẫn kèm ĐÚNG 5 hashtag thịnh hành liên quan đến sản phẩm và TikTok Shop (`caption`)."
+        )
+    else:
+        channel_role = (
+            "Bạn là một Content Creator chuyên nghiệp trên TikTok chuyên xây dựng kênh triệu view "
+            "về mẹo hay đời sống, khám phá sản phẩm tiện ích và công nghệ thông minh."
+        )
+        script_type = "xây kênh viral kéo follower và giữ chân người xem (channel building script)"
+        cta_instruction = (
+            "Phần kết: Kêu gọi hành động (CTA) hướng tới TƯƠNG TÁC và FOLLOW KÊNH "
+            "(Ví dụ: 'Follow kênh mình để biết thêm nhiều mẹo hay ho nhé!', 'Thả tim và lưu lại ngay!', 'Anh em thấy món này thế nào, bình luận bên dưới nhé!').\n"
+            "   - QUY TẮC SỐNG CÒN: TUYỆT ĐỐI KHÔNG nhắc đến giỏ hàng, mua hàng, đặt hàng, giá tiền, link bio "
+            "để bảo vệ kênh mới khỏi bị TikTok bóp tương tác khi chưa đủ 1000 follower."
+        )
+        caption_instruction = (
+            "Viết caption đăng TikTok ngắn gọn, đặt câu hỏi gợi mở thảo luận kèm ĐÚNG 5 hashtag viral thịnh hành kéo tương tác "
+            "(Ví dụ: #xuhuong #fyp #trending #meohay #learnontiktok)."
+        )
+
     return (
-        "Bạn là một chuyên gia sáng tạo nội dung video TikTok Affiliate hàng đầu tại Việt Nam.\n"
+        f"{channel_role}\n"
         "Hãy phân tích kỹ video được cung cấp và thực hiện các yêu cầu sau:\n\n"
-        "1. Xác định chính xác tên sản phẩm được review / xuất hiện trong video (`product_name`).\n"
-        "2. Viết một kịch bản lời bình (voiceover) tiếp thị liên kết (affiliate script) cực kỳ cuốn hút (`voiceover`):\n"
+        "1. Xác định chính xác tên sản phẩm / chủ đề xuất hiện trong video (`product_name`).\n"
+        f"2. Viết một kịch bản lời bình (voiceover) {script_type} (`voiceover`):\n"
         f"   - {style_guide}\n"
         "   - Độ dài: BẮT BUỘC trong khoảng từ 75 đến 90 từ tiếng Việt (để khi đọc với tốc độ +10% đạt thời lượng dưới 30 giây).\n"
         "   - 3 giây đầu: Câu Hook giật gân, đánh trúng nỗi đau, sự tò mò hoặc kết quả bất ngờ để giữ chân người xem.\n"
         "   - Phần giữa: Nêu bật tính năng nổi bật, công dụng thực tế và lợi ích của sản phẩm được minh họa trong video.\n"
-        "   - Phần kết: Kêu gọi hành động (Call To Action - CTA) dứt khoát: hướng dẫn người xem bấm ngay vào GIỎ HÀNG GÓC TRÁI BÊN DƯỚI màn hình để mua với giá ưu đãi.\n"
+        f"   - {cta_instruction}\n"
         "   - QUY TẮC TUYỆT ĐỐI (STRICT NEGATIVE CONSTRAINTS):\n"
         "     + TUYỆT ĐỐI KHÔNG có bất kỳ ghi chú đạo diễn nào (ví dụ: [nhạc nền], (cười), [Cảnh 1], Hook:, CTA:...). \n"
         "     + TUYỆT ĐỐI KHÔNG chứa bất kỳ ký tự nào trong dấu ngoặc đơn () hoặc ngoặc vuông [].\n"
         "     + Nội dung `voiceover` CHỈ chứa DUY NHẤT các câu từ mà người đọc sẽ phát âm ra tiếng.\n"
-        "3. Viết caption đăng TikTok ngắn gọn, hấp dẫn kèm ĐÚNG 5 hashtag thịnh hành liên quan đến sản phẩm và TikTok Shop (`caption`).\n\n"
+        f"3. {caption_instruction}\n\n"
         "Trả về kết quả dưới định dạng JSON tuân thủ đúng schema quy định."
     )
 
 
-PROMPT_TEMPLATE = get_script_prompt("trend")
+PROMPT_TEMPLATE = get_script_prompt("trend", True)
 
 
 class VideoScriptResponse(BaseModel):
     """Structured response schema for Gemini video analysis and script generation."""
     product_name: str = Field(
-        description="Tên sản phẩm chính được review hoặc xuất hiện trong video"
+        description="Tên sản phẩm hoặc chủ đề chính xuất hiện trong video"
     )
     voiceover: str = Field(
-        description="Kịch bản lời bình tiếp thị liên kết bằng tiếng Việt, 75-90 từ, hook 3s, CTA bấm giỏ hàng góc trái bên dưới, không ghi chú đạo diễn hay dấu ngoặc"
+        description="Kịch bản lời bình bằng tiếng Việt, 75-90 từ, hook 3s, không ghi chú đạo diễn hay dấu ngoặc"
     )
     caption: str = Field(
         description="Caption mô tả đăng video TikTok bằng tiếng Việt kèm đúng 5 hashtag thịnh hành"
@@ -115,6 +143,7 @@ def generate_script(
     video_path: str,
     api_key: str | None = None,
     style: str = "trend",
+    is_affiliate: bool = True,
 ) -> dict:
     """
     Uploads video_path to Gemini, polls until ACTIVE, requests Gemini model with
@@ -125,6 +154,7 @@ def generate_script(
         video_path: Path to the review video MP4 file to analyze.
         api_key: Optional Gemini API key. Defaults to GEMINI_API_KEY environment variable.
         style: Script style ("trend", "drama", "fomo", "review"). Defaults to "trend".
+        is_affiliate: True for Affiliate (>1k fl, CTA cart), False for Channel Building (<1k fl, CTA follow).
 
     Returns:
         dict: Containing 'product_name', 'voiceover', and 'caption'.
@@ -177,7 +207,7 @@ def generate_script(
         # Deduplicate while preserving order
         candidate_models = list(dict.fromkeys(candidate_models))
 
-        prompt_text = get_script_prompt(style)
+        prompt_text = get_script_prompt(style=style, is_affiliate=is_affiliate)
         response = None
         last_error = None
         for m_name in candidate_models:
@@ -362,9 +392,10 @@ def discover_trending_products(
     exclude_keywords: list[str] | None = None,
     count: int = 5,
     niche: str | None = None,
+    is_affiliate: bool = True,
 ) -> list[dict[str, str]]:
     """
-    Discovers high-converting trending affiliate products on TikTok Shop Vietnam.
+    Discovers trending products for TikTok Shop Affiliate or Channel Building (viral gadgets).
     Attempts Gemini AI dynamic generation first, falling back smoothly to curated seeds.
 
     Args:
@@ -372,6 +403,7 @@ def discover_trending_products(
         exclude_keywords: List of keywords/product names to exclude to avoid repeats.
         count: Number of candidate products to return.
         niche: Optional niche category ('home', 'tech', 'beauty', 'decor', 'fashion').
+        is_affiliate: True for affiliate selling, False for viral channel building.
 
     Returns:
         list of dicts with 'name', 'keyword', and 'category'.
@@ -387,9 +419,16 @@ def discover_trending_products(
     # Attempt dynamic discovery via Gemini AI
     try:
         client = create_genai_client(api_key=api_key)
+        if is_affiliate:
+            role_desc = "Bạn là chuyên gia săn sản phẩm TikTok Shop Affiliate Marketing tại Việt Nam."
+            goal_desc = f"Hãy gợi ý {count} sản phẩm đang thịnh hành (trending), dễ bán, hoa hồng tốt và nhiều video review ngắn nhất trên TikTok Shop hiện nay.\n"
+        else:
+            role_desc = "Bạn là chuyên gia xây dựng nội dung TikTok triệu view tại Việt Nam."
+            goal_desc = f"Hãy gợi ý {count} món đồ công nghệ thông minh, tiện ích độc lạ hoặc mẹo đời sống siêu cuốn, có tính tò mò và tính viral cao nhất để xây kênh kéo follower mới.\n"
+
         prompt = (
-            f"Bạn là chuyên gia săn sản phẩm TikTok Shop Affiliate Marketing tại Việt Nam.\n"
-            f"Hãy gợi ý {count} sản phẩm đang thịnh hành (trending), dễ bán, hoa hồng tốt và nhiều video review ngắn nhất trên TikTok Shop hiện nay.\n"
+            f"{role_desc}\n"
+            f"{goal_desc}"
             f"{niche_prompt}"
             f"Yêu cầu:\n"
             f"- Cung cấp 'name' (tên sản phẩm rõ ràng), 'keyword' (từ khóa 3-6 từ tiếng Việt kèm chữ 'review' để tìm clip trên YouTube/TikTok), 'category' (ngành hàng).\n"
