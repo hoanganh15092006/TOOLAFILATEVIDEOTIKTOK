@@ -1,0 +1,7 @@
+google-genai
+yt-dlp
+edge-tts
+moviepy==1.0.3
+playwright
+python-dotenv
+imageio-ffmpeg

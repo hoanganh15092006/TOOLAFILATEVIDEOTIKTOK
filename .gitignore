@@ -1,0 +1,40 @@
+# Secrets & Environment variables
+.env
+*.env
+*.key
+
+# Browser profile and authentication state (TikTok cookies & sessions)
+chrome_profile/
+chrome_profile*/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Media directories and temporary audio/video files
+input_videos/
+output_videos/
+*.mp4
+*.mp3
+*.wav
+*.avi
+*.mkv
+voiceover.mp3
+
+# Tracking and runtime local state
+history.json
+
+# IDE & Editor files
+.vscode/
+.idea/
+.agents/
+*.swp
+*.swo
+
+# Virtual environment
+venv/
+.venv/
+env/
