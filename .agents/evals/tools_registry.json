@@ -87,6 +87,16 @@
       "description": "Tự động tạo/cập nhật Devlog, lập chỉ mục README, kiểm tra an toàn tệp nhạy cảm (.env, media), commit chuẩn hóa và push lên GitHub với cơ chế tự rebase khi có conflict.",
       "entry_point": "python .agents/skills/tool-learner-evaluator/scripts/sync_to_github.py",
       "dependencies": ["git"]
+    },
+    {
+      "id": "affiliate_director",
+      "name": "TikTok Affiliate Producer & AI Content Director",
+      "file_path": "affiliate_director.py",
+      "type": "google_flow_video_generator",
+      "description": "Độc bản hóa video TikTok Affiliate 100% từ ảnh sản phẩm. Sử dụng Gemini 2.5 Vision phân tích pain points, sinh storyboard, tạo asset chuyển động Ken Burns 9:16, lồng tiếng edge-tts và áp dụng bộ lọc lách quét kiểm duyệt TikTok.",
+      "entry_point": "python affiliate_director.py -i <image_path>",
+      "dependencies": ["google-genai", "moviepy", "Pillow", "edge-tts", "pydantic"],
+      "key_functions": ["analyze_product_image", "create_scene_frame", "render_scene_clip_ffmpeg", "assemble_final_affiliate_video", "audit_tiktok_compliance", "produce_affiliate_video_from_image"]
     }
   ]
 }
